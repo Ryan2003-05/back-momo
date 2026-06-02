@@ -16,7 +16,7 @@ class GatewayController extends Controller
 
     private array $prefixesMTN    = [42,46,50,51,52,53,54,56,57,59,61,62,66,67,69,90,91,96,97];
     private array $prefixesMoov   = [55,58,60,63,64,65,68,94,95,98];
-    private array $prefixesCeltis = [40,41,43,44,47];
+    private array $prefixesCeltiis = [40,41,43,44,47];
 
     //  Afficher les infos de la session 
 
@@ -296,7 +296,7 @@ class GatewayController extends Controller
         return match(true) {
             in_array($prefixe, $this->prefixesMTN)    => 'MTN',
             in_array($prefixe, $this->prefixesMoov)   => 'Moov',
-            in_array($prefixe, $this->prefixesCeltis) => 'Celtis',
+            in_array($prefixe, $this->prefixesCeltiis) => 'Celtiis',
             default                                   => 'Inconnu',
         };
     }
@@ -590,3 +590,4 @@ class GatewayController extends Controller
         return $this->confirmerPaiement($fakeRequest, $sessionId);
     }
 }
+

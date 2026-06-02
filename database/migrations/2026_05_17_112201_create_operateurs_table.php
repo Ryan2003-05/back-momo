@@ -10,7 +10,7 @@ return new class extends Migration {
     {
         Schema::create('operateurs', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->string('nom', 50); // MTN, Moov, Celtis
+            $table->string('nom', 50); // MTN, Moov, Celtiis
             $table->boolean('actif')->default(true);
         });
     }

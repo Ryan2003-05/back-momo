@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
         $operateurs = [
             ['nom' => 'MTN',    'actif' => true],
             ['nom' => 'Moov',   'actif' => true],
-            ['nom' => 'Celtis', 'actif' => true],
+            ['nom' => 'Celtiis', 'actif' => true],
         ];
 
         foreach ($operateurs as $op) {
