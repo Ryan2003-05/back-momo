@@ -63,6 +63,14 @@ Route::get('/seed-operateurs', function () {
         'all' => \App\Models\Operateur::all(),
     ];
 });
+
+Route::get('/db-check', function () {
+    return [
+        'database' => env('DB_DATABASE'),
+        'host'     => env('DB_HOST'),
+        'user'     => env('DB_USERNAME'),
+    ];
+});
 Route::middleware('auth:api')->group(function () {
 
     // ─── Auth ─────────────────────────────────────────────────────────────
