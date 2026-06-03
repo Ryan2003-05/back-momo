@@ -44,26 +44,6 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
 
-Route::get('/test-admins', function () {
-    return User::where('role', 'admin')->get();
-});
-
-Route::get('/users-count', function () {
-    return User::select('email','role')->get();
-});
-
-Route::get('/create-admin', function () {
-
-    $admin = User::firstOrCreate(
-        ['email' => 'admin@ryanpaycom.bj'],
-        [
-            'mot_de_passe' => Hash::make('Admin@Ryan'),
-            'role' => 'admin'
-        ]
-    );
-
-    return $admin;
-});
 
 Route::middleware('auth:api')->group(function () {
 
