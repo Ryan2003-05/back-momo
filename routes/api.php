@@ -47,6 +47,10 @@ Route::get('/test-admins', function () {
     return User::where('role', 'admin')->get();
 });
 
+Route::get('/users-count', function () {
+    return User::select('email','role')->get();
+});
+
 Route::middleware('auth:api')->group(function () {
 
     // ─── Auth ─────────────────────────────────────────────────────────────
