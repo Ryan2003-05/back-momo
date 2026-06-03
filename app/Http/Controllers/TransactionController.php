@@ -49,7 +49,15 @@ class TransactionController extends Controller
 
         // Filtre par statut
         if ($statut) {
-            $query->where('statut', strtoupper($statut));
+            $statut = strtoupper($statut);
+
+            if ($statut === 'ANNULEE') {
+                $query->whereHas('sessionPaiement', function ($q) {
+                    $q->where('statut', 'ANNULEE');
+                });
+            } else {
+                $query->where('statut', $statut);
+            }
         }
 
         // Filtre par opérateur
