@@ -43,7 +43,12 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
 Route::get('/test-operateurs', function () {
-    return Operateur::all();
+
+    return [
+        'count' => \App\Models\Operateur::count(),
+        'all' => \App\Models\Operateur::all(),
+    ];
+
 });
 Route::get('/seed-operateurs', function () {
     Artisan::call('db:seed');
