@@ -51,11 +51,16 @@ Route::get('/test-operateurs', function () {
 
 });
 Route::get('/seed-operateurs', function () {
-    Artisan::call('db:seed');
+
+    $op = \App\Models\Operateur::create([
+        'nom' => 'TEST',
+        'actif' => true,
+    ]);
 
     return [
-        'success' => true,
-        'message' => 'Seeder exécuté'
+        'created' => $op,
+        'count' => \App\Models\Operateur::count(),
+        'all' => \App\Models\Operateur::all(),
     ];
 });
 Route::middleware('auth:api')->group(function () {
