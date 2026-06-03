@@ -9,6 +9,9 @@ use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\AdminController;
 use App\Models\Operateur;
+use Database\Seeders\DatabaseSeeder;
+use Illuminate\Support\Facades\Artisan;
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PUBLIQUES — Auth (sans token)
@@ -41,6 +44,14 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════
 Route::get('/test-operateurs', function () {
     return Operateur::all();
+});
+Route::get('/seed-operateurs', function () {
+    Artisan::call('db:seed');
+
+    return [
+        'success' => true,
+        'message' => 'Seeder exécuté'
+    ];
 });
 Route::middleware('auth:api')->group(function () {
 
