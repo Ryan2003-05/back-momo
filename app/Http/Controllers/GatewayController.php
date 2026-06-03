@@ -6,7 +6,9 @@ use App\Models\SessionPaiement;
 use App\Models\Transaction;
 use App\Models\Recu;
 use App\Models\Notification;
+use App\Models\PushRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
@@ -419,14 +421,16 @@ class GatewayController extends Controller
         ], 200);
     }
 
-    // Envoyer un push USSD simulé 
+    // Envoyer un push Mobile Money simulé mais réaliste
     public function envoyerPush(Request $request, string $sessionId)
     {
         $request->validate([
             'numero_client' => 'required|string|max:20',
         ]);
 
-        $session = SessionPaiement::find($sessionId);
+        $numeroClient = $this->normaliserNumeroClient($request->numero_client);
+
+        $session = SessionPaiement::with(['compteOperateur.operateur', 'commercant'])->find($sessionId);
 
         if (!$session) {
             return response()->json(['message' => 'Session introuvable.'], 404);
@@ -439,39 +443,93 @@ class GatewayController extends Controller
             ], 410);
         }
 
-        // Supprimer les anciens push de cette session
-        \App\Models\PushRequest::where('session_paiement_id', $sessionId)->delete();
+        if ($session->statut !== 'EN_ATTENTE') {
+            return response()->json([
+                'message' => 'Cette session n\'est plus disponible.',
+            ], 409);
+        }
 
-        // Créer le push — expire dans 3 minutes
-        $push = \App\Models\PushRequest::create([
+        $operateurDetecte = $this->detecterOperateur($numeroClient);
+
+        if ($operateurDetecte === 'Inconnu') {
+            return response()->json([
+                'message' => 'Numéro non reconnu. Vérifiez le numéro mobile money du client.',
+            ], 422);
+        }
+
+        $operateursAcceptes = $session->commercant->compteOperateurs()
+            ->where('actif', true)
+            ->with('operateur')
+            ->get()
+            ->map(fn($co) => $co->operateur->nom)
+            ->toArray();
+
+        if (!in_array($operateurDetecte, $operateursAcceptes)) {
+            return response()->json([
+                'message' => 'L\'opérateur ' . $operateurDetecte . ' n\'est pas accepté par ce commerçant.',
+                'operateurs_acceptes' => $operateursAcceptes,
+            ], 422);
+        }
+
+        // Supprimer les anciens push de cette session
+        PushRequest::where('session_paiement_id', $sessionId)
+            ->where('statut', 'EN_ATTENTE')
+            ->update(['statut' => 'EXPIRE']);
+
+        $providerReference = 'PUSH-' . strtoupper(Str::random(12));
+        $pushUrl = $this->urlPushClient($numeroClient, $providerReference);
+        $messagePush = $this->messagePushClient($session, $operateurDetecte, $numeroClient, $pushUrl);
+
+        $delivery = $this->envoyerNotificationPushSimulee($numeroClient, $messagePush, $providerReference);
+
+        $push = PushRequest::create([
             'session_paiement_id' => $sessionId,
-            'numero_client'       => $request->numero_client,
+            'numero_client'       => $numeroClient,
             'statut'              => 'EN_ATTENTE',
+            'provider'            => $delivery['provider'],
+            'provider_reference'  => $providerReference,
+            'provider_payload'    => [
+                'channel' => $delivery['channel'],
+                'delivery_status' => $delivery['status'],
+                'numero' => $numeroClient,
+                'operateur_detecte' => $operateurDetecte,
+                'message' => $messagePush,
+                'push_url' => $pushUrl,
+                'raw_response' => $delivery['raw_response'],
+            ],
             'expires_at'          => now()->addMinutes(3),
         ]);
 
-        $commercant = $session->commercant;
-        $operateur  = $session->compteOperateur->operateur;
-
         return response()->json([
-            'message'    => 'Push envoyé au client ' . $request->numero_client,
-            'push_id'    => $push->id,
-            'push_url'   => $this->urlPushClient($request->numero_client),
-            'montant'    => $session->montant,
-            'libelle'    => $session->libelle,
-            'operateur'  => $operateur->nom,
-            'commerce'   => $commercant->nom_entreprise,
-            'expires_at' => $push->expires_at,
+            'message'            => $delivery['user_message'],
+            'push_id'            => $push->id,
+            'push_reference'     => $providerReference,
+            'push_url'           => $pushUrl,
+            'numero_client'      => $numeroClient,
+            'operateur_detecte'  => $operateurDetecte,
+            'provider'           => $delivery['provider'],
+            'channel'            => $delivery['channel'],
+            'statut_envoi'       => $delivery['status'],
+            'contenu_message'    => $messagePush,
+            'montant'            => $session->montant,
+            'libelle'            => $session->libelle,
+            'operateur'          => $operateurDetecte,
+            'commerce'           => $session->commercant->nom_entreprise,
+            'expires_at'         => $push->expires_at,
         ], 201);
     }
 
     // Vérifier le statut du push (polling client)
     public function statutPush(Request $request)
     {
-        $query = \App\Models\PushRequest::where('statut', 'EN_ATTENTE');
+        $query = PushRequest::where('statut', 'EN_ATTENTE');
 
         if ($request->filled('numero')) {
-            $query->where('numero_client', $request->numero);
+            $query->where('numero_client', $this->normaliserNumeroClient($request->numero));
+        }
+
+        if ($request->filled('reference')) {
+            $query->where('provider_reference', $request->reference);
         }
 
         $push = $query->latest()->first();
@@ -503,6 +561,9 @@ class GatewayController extends Controller
                 'commerce'   => $commercant->nom_entreprise,
                 'numero'     => $push->numero_client,
                 'expires_at' => $push->expires_at,
+                'reference'  => $push->provider_reference,
+                'provider'   => $push->provider,
+                'payload'    => $push->provider_payload,
             ],
         ], 200);
     }
@@ -522,15 +583,96 @@ class GatewayController extends Controller
         return $this->frontendUrl($origin) . '/gateway/' . $sessionId;
     }
 
-    private function urlPushClient(?string $numeroClient = null): string
+    private function urlPushClient(?string $numeroClient = null, ?string $reference = null): string
     {
         $url = $this->frontendUrl() . '/push-client';
+        $query = [];
 
         if ($numeroClient) {
-            $url .= '?numero=' . urlencode($numeroClient);
+            $query['numero'] = $numeroClient;
+        }
+
+        if ($reference) {
+            $query['reference'] = $reference;
+        }
+
+        if ($query) {
+            $url .= '?' . http_build_query($query);
         }
 
         return $url;
+    }
+
+    private function normaliserNumeroClient(string $numero): string
+    {
+        return preg_replace('/[^\d+]/', '', $numero) ?: $numero;
+    }
+
+    private function messagePushClient(
+        SessionPaiement $session,
+        string $operateurDetecte,
+        string $numeroClient,
+        string $pushUrl
+    ): string {
+        return 'PayPME: demande ' . $operateurDetecte . ' Money de '
+            . number_format((float) $session->montant, 0, ',', ' ')
+            . ' FCFA chez ' . $session->commercant->nom_entreprise
+            . '. Numero: ' . $numeroClient
+            . '. Validez ici: ' . $pushUrl
+            . ' Ref: ' . strtoupper(substr(md5($session->id . $numeroClient), 0, 6))
+            . '. Expire dans 3 min.';
+    }
+
+    private function envoyerNotificationPushSimulee(string $numeroClient, string $message, string $reference): array
+    {
+        $endpoint = config('services.simulated_push.sms_endpoint');
+        $apiKey = config('services.simulated_push.sms_api_key');
+
+        if (!$endpoint) {
+            return [
+                'provider' => 'simulation_locale',
+                'channel' => 'virtual_push',
+                'status' => 'SIMULE',
+                'user_message' => 'Push simulé disponible pour le client ' . $numeroClient . '.',
+                'raw_response' => null,
+            ];
+        }
+
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders(array_filter([
+                    'Authorization' => $apiKey ? 'Bearer ' . $apiKey : null,
+                    'X-PayPME-Reference' => $reference,
+                ]))
+                ->post($endpoint, [
+                    'to' => $numeroClient,
+                    'message' => $message,
+                    'reference' => $reference,
+                ]);
+
+            return [
+                'provider' => 'sms_http',
+                'channel' => 'sms',
+                'status' => $response->successful() ? 'ENVOYE' : 'ECHEC_ENVOI',
+                'user_message' => $response->successful()
+                    ? 'SMS de push envoyé au client ' . $numeroClient . '.'
+                    : 'Push créé, mais le fournisseur SMS a refusé l\'envoi.',
+                'raw_response' => [
+                    'status' => $response->status(),
+                    'body' => Str::limit($response->body(), 500),
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'provider' => 'sms_http',
+                'channel' => 'sms',
+                'status' => 'ECHEC_ENVOI',
+                'user_message' => 'Push créé, mais l\'envoi SMS a échoué.',
+                'raw_response' => [
+                    'error' => $e->getMessage(),
+                ],
+            ];
+        }
     }
 
     public function confirmerPush(Request $request, string $sessionId)

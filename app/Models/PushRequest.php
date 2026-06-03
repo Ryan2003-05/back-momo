@@ -13,12 +13,16 @@ class PushRequest extends Model
         'session_paiement_id',
         'numero_client',
         'statut',
+        'provider',
+        'provider_reference',
+        'provider_payload',
         'pin',
         'expires_at',
     ];
 
     protected $casts = [
         'expires_at' => 'datetime',
+        'provider_payload' => 'array',
     ];
 
     public function sessionPaiement()

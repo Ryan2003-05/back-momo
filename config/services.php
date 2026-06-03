@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'simulated_push' => [
+        'sms_endpoint' => env('SIMULATED_PUSH_SMS_ENDPOINT'),
+        'sms_api_key' => env('SIMULATED_PUSH_SMS_API_KEY'),
+    ],
+
 ];
