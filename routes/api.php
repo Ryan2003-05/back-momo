@@ -11,7 +11,7 @@ use App\Http\Controllers\AdminController;
 use App\Models\Operateur;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
-
+use App\Models\User;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PUBLIQUES — Auth (sans token)
@@ -42,6 +42,10 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
+
+Route::get('/test-admins', function () {
+    return User::where('role', 'admin')->get();
+});
 
 Route::middleware('auth:api')->group(function () {
 
