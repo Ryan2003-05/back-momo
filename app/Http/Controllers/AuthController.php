@@ -54,7 +54,7 @@ class AuthController extends Controller
                 ],
             ], 422);
         }
-
+    try {    
         DB::transaction(function () use ($request, $operateurs) {
             $user = User::create([
                 'email'        => $request->email,
@@ -83,18 +83,17 @@ class AuthController extends Controller
                     'actif'         => true,
                     'solde'         => 0,
                 ]);
-
-                $nb = CompteOperateur::count();
-
-\Log::info("NB COMPTES OPERATEURS = ".$nb);
-
-                \Log::info('COMPTE CREE', [
-    'id' => $nouveauCompte->id,
-    'commercant_id' => $nouveauCompte->commercant_id,
-]);
             }
-            
-        });
+        });  
+
+    } catch (\Exception $e) {
+
+    return response()->json([
+        'error' => $e->getMessage(),
+        'line'  => $e->getLine(),
+        'file'  => basename($e->getFile())
+    ], 500);
+}
 
         // 4. On ne génère pas de token — le commerçant doit se connecter
         return response()->json([
