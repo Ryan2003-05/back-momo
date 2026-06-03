@@ -42,6 +42,12 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
+Route::get('/clean-operateurs', function () {
+
+    \App\Models\Operateur::where('nom', 'TEST')->delete();
+
+    return \App\Models\Operateur::all();
+});
 
 Route::middleware('auth:api')->group(function () {
 
