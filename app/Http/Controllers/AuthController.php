@@ -38,6 +38,9 @@ class AuthController extends Controller
                                ->where('actif', true)
                                ->get()
                                ->keyBy('nom');
+                               //  LOGS
+\Log::info('OPERATEURS DEMANDES', $nomsOperateurs->toArray());
+\Log::info('OPERATEURS TROUVES', $operateurs->keys()->toArray());
 
         $operateursManquants = $nomsOperateurs->diff($operateurs->keys());
 
