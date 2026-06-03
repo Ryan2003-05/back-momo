@@ -52,13 +52,25 @@ Route::get('/test-operateurs', function () {
 });
 Route::get('/seed-operateurs', function () {
 
-    $op = \App\Models\Operateur::create([
-        'nom' => 'TEST',
-        'actif' => true,
+    \App\Models\Operateur::firstOrCreate([
+        'nom' => 'MTN'
+    ], [
+        'actif' => true
+    ]);
+
+    \App\Models\Operateur::firstOrCreate([
+        'nom' => 'Moov'
+    ], [
+        'actif' => true
+    ]);
+
+    \App\Models\Operateur::firstOrCreate([
+        'nom' => 'Celtiis'
+    ], [
+        'actif' => true
     ]);
 
     return [
-        'created' => $op,
         'count' => \App\Models\Operateur::count(),
         'all' => \App\Models\Operateur::all(),
     ];
