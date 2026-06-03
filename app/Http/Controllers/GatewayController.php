@@ -566,9 +566,27 @@ class GatewayController extends Controller
         if ($request->action === 'refuser') {
             $push->update(['statut' => 'REFUSE']);
 
+            $session = SessionPaiement::with(['compteOperateur.operateur', 'transaction'])
+                ->find($sessionId);
+
+            if ($session && $session->statut === 'EN_ATTENTE' && !$session->transaction) {
+                $session->update(['statut' => 'ANNULEE']);
+
+                $transaction = Transaction::create([
+                    'session_paiement_id' => $session->id,
+                    'operateur_id'        => $session->compteOperateur->operateur->id,
+                    'reference_gateway'   => 'REFUS-' . strtoupper(Str::random(8)),
+                    'statut'              => 'FAILED',
+                    'numero_client'       => $push->numero_client,
+                    'created_at'          => now(),
+                ]);
+
+                $this->notifierCommerçant($session, $transaction, 'ANNULEE');
+            }
+
             return response()->json([
                 'message' => 'Paiement refusé.',
-                'statut' => 'REFUSE'
+                'statut' => 'ANNULEE'
             ], 200);
         }
 
