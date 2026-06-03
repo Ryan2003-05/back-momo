@@ -8,6 +8,7 @@ use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\AdminController;
+use App\Models\Operateur;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PUBLIQUES — Auth (sans token)
@@ -38,7 +39,9 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
-
+Route::get('/test-operateurs', function () {
+    return Operateur::all();
+});
 Route::middleware('auth:api')->group(function () {
 
     // ─── Auth ─────────────────────────────────────────────────────────────
