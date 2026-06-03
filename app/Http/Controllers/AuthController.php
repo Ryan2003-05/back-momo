@@ -118,6 +118,12 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if ($user->role === 'commercant' && $user->commercant?->statut === 'suspendu') {
+            return response()->json([
+                'message' => 'Votre compte commerçant est suspendu. Contactez l’administrateur.',
+            ], 403);
+        }
+
         $token = JWTAuth::fromUser($user);
 
         // Sauvegarde le token en base

@@ -134,9 +134,16 @@ class AdminController extends Controller
         }
 
         $commercants = $query->latest()->paginate(20);
+        $stats = [
+            'total'     => Commercant::count(),
+            'actifs'    => Commercant::where('statut', 'actif')->count(),
+            'attente'   => Commercant::where('statut', 'attente')->count(),
+            'suspendus' => Commercant::where('statut', 'suspendu')->count(),
+        ];
 
         return response()->json([
             'commercants' => $commercants,
+            'stats'       => $stats,
         ], 200);
     }
 
@@ -173,15 +180,18 @@ class AdminController extends Controller
     {
         $this->verifierAdmin();
 
-        $commercant = Commercant::find($id);
+        $commercant = Commercant::with('user')->find($id);
 
         if (!$commercant) {
             return response()->json(['message' => 'Commerçant introuvable.'], 404);
         }
 
-        $commercant->user->update(['token_session' => null]);
+        $commercant->update(['statut' => 'suspendu']);
+        $commercant->user?->update(['token_session' => null]);
+        $commercant->load(['user', 'compteOperateurs.operateur']);
 
         return response()->json([
+            'commercant' => $commercant,
             'message' => 'Compte commerçant suspendu.',
         ], 200);
     }
@@ -193,6 +203,10 @@ class AdminController extends Controller
         $this->verifierAdmin();
 
         $commercant = Commercant::find($id);
+        if ($commercant) {
+            $commercant->update(['statut' => 'actif']);
+            $commercant->load(['user', 'compteOperateurs.operateur']);
+        }
 
         if (!$commercant) {
             return response()->json(['message' => 'Commerçant introuvable.'], 404);

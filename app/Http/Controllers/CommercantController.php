@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Commercant;
 use App\Models\CompteOperateur;
+use App\Models\Operateur;
 use App\Models\Transaction;
 use App\Models\SessionPaiement;
 use Illuminate\Http\Request;
@@ -17,7 +18,13 @@ class CommercantController extends Controller
     private function getCommercant()
     {
         $user = JWTAuth::parseToken()->authenticate();
-        return $user->commercant;
+        $commercant = $user->commercant;
+
+        if ($commercant?->statut === 'suspendu') {
+            abort(403, 'Compte commercant suspendu.');
+        }
+
+        return $commercant;
     }
 
     //  Voir son profil complet 
@@ -110,13 +117,75 @@ class CommercantController extends Controller
         ], 200);
     }
 
+    // Ajouter un compte operateur
+    public function creerCompte(Request $request)
+    {
+        $commercant = $this->getCommercant();
+
+        $request->validate([
+            'operateur_id'  => 'sometimes|uuid',
+            'operateur_nom' => 'required_without:operateur_id|string|max:50',
+            'numero'        => 'required|string|max:20',
+            'actif'         => 'sometimes|boolean',
+        ]);
+
+        if ($commercant->compteOperateurs()->count() >= 3) {
+            return response()->json([
+                'message' => 'Vous pouvez avoir au maximum 3 comptes mobile money.',
+            ], 422);
+        }
+
+        $operateur = $this->trouverOperateurActif($request);
+
+        if (!$operateur) {
+            return response()->json([
+                'message' => 'Operateur indisponible ou introuvable.',
+            ], 422);
+        }
+
+        $existeDeja = $commercant->compteOperateurs()
+                                 ->where('operateur_id', $operateur->id)
+                                 ->exists();
+
+        if ($existeDeja) {
+            return response()->json([
+                'message' => 'Un compte existe deja pour cet operateur.',
+            ], 422);
+        }
+
+        $actif = $request->has('actif') ? $request->boolean('actif') : true;
+        $actifs = $commercant->compteOperateurs()->where('actif', true)->count();
+
+        if (!$actif && $actifs === 0) {
+            return response()->json([
+                'message' => 'Vous devez garder au moins 1 compte actif.',
+            ], 422);
+        }
+
+        $compte = CompteOperateur::create([
+            'commercant_id' => $commercant->id,
+            'operateur_id'  => $operateur->id,
+            'numero'        => $request->numero,
+            'actif'         => $actif,
+            'solde'         => 0,
+        ]);
+
+        return response()->json([
+            'message' => 'Compte mobile money ajoute avec succes.',
+            'compte'  => $compte->load('operateur'),
+        ], 201);
+    }
+
     // Modifier un numéro opérateur
     public function mettreAJourCompte(Request $request, string $id)
     {
         $commercant = $this->getCommercant();
 
         $request->validate([
-            'numero' => 'required|string|max:20',
+            'operateur_id'  => 'sometimes|uuid',
+            'operateur_nom' => 'sometimes|string|max:50',
+            'numero'        => 'sometimes|required|string|max:20',
+            'actif'         => 'sometimes|boolean',
         ]);
 
         // Vérifier que ce compte appartient bien au commerçant
@@ -130,7 +199,56 @@ class CommercantController extends Controller
             ], 404);
         }
 
-        $compte->update(['numero' => $request->numero]);
+        $data = [];
+
+        if ($request->filled('numero')) {
+            $data['numero'] = $request->numero;
+        }
+
+        if ($request->filled('operateur_id') || $request->filled('operateur_nom')) {
+            $operateur = $this->trouverOperateurActif($request);
+
+            if (!$operateur) {
+                return response()->json([
+                    'message' => 'Operateur indisponible ou introuvable.',
+                ], 422);
+            }
+
+            $existeDeja = $commercant->compteOperateurs()
+                                     ->where('operateur_id', $operateur->id)
+                                     ->where('id', '!=', $compte->id)
+                                     ->exists();
+
+            if ($existeDeja) {
+                return response()->json([
+                    'message' => 'Un compte existe deja pour cet operateur.',
+                ], 422);
+            }
+
+            $data['operateur_id'] = $operateur->id;
+        }
+
+        if ($request->has('actif')) {
+            $prochainStatut = $request->boolean('actif');
+            $actifs = $commercant->compteOperateurs()->where('actif', true)->count();
+
+            if (!$prochainStatut && (($compte->actif && $actifs <= 1) || $actifs === 0)) {
+                return response()->json([
+                    'message' => 'Vous devez garder au moins 1 compte actif.',
+                ], 422);
+            }
+
+            $data['actif'] = $prochainStatut;
+        }
+
+        if (empty($data)) {
+            return response()->json([
+                'message' => 'Aucune modification fournie.',
+                'compte'  => $compte->load('operateur'),
+            ], 200);
+        }
+
+        $compte->update($data);
 
         return response()->json([
             'message' => 'Numéro mis à jour avec succès.',
@@ -139,6 +257,21 @@ class CommercantController extends Controller
     }
 
     //  Dashboard — stats du commerçant (RG24) 
+
+    private function trouverOperateurActif(Request $request): ?Operateur
+    {
+        $query = Operateur::where('actif', true);
+
+        if ($request->filled('operateur_id')) {
+            return $query->where('id', $request->operateur_id)->first();
+        }
+
+        if ($request->filled('operateur_nom')) {
+            return $query->where('nom', $request->operateur_nom)->first();
+        }
+
+        return null;
+    }
 
     public function dashboard(Request $request)
     {

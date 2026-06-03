@@ -20,6 +20,7 @@ class Commercant extends Model
         'ifu',
         'type_commerce',
         'ville',
+        'statut',
     ];
 
     // Relations

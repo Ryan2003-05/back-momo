@@ -60,6 +60,7 @@ Route::middleware('auth:api')->group(function () {
         Route::put('profil',                  [CommercantController::class, 'mettreAJourProfil']);
         Route::put('mot-de-passe',            [CommercantController::class, 'changerMotDePasse']);
         Route::get('comptes-operateurs',      [CommercantController::class, 'compteOperateurs']);
+        Route::post('comptes-operateurs',     [CommercantController::class, 'creerCompte']);
         Route::put('comptes-operateurs/{id}', [CommercantController::class, 'mettreAJourCompte']);
     });
 
