@@ -12,6 +12,7 @@ use App\Models\Operateur;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PUBLIQUES — Auth (sans token)
@@ -49,6 +50,19 @@ Route::get('/test-admins', function () {
 
 Route::get('/users-count', function () {
     return User::select('email','role')->get();
+});
+
+Route::get('/create-admin', function () {
+
+    $admin = User::firstOrCreate(
+        ['email' => 'admin@ryanpaycom.bj'],
+        [
+            'mot_de_passe' => Hash::make('Admin@Ryan'),
+            'role' => 'admin'
+        ]
+    );
+
+    return $admin;
 });
 
 Route::middleware('auth:api')->group(function () {
