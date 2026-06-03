@@ -42,47 +42,7 @@ Route::prefix('gateway/{sessionId}')->group(function () {
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTES PROTÉGÉES — JWT requis
 // ═══════════════════════════════════════════════════════════════════════════
-Route::get('/test-operateurs', function () {
 
-    return [
-        'count' => \App\Models\Operateur::count(),
-        'all' => \App\Models\Operateur::all(),
-    ];
-
-});
-Route::get('/seed-operateurs', function () {
-
-    \App\Models\Operateur::firstOrCreate([
-        'nom' => 'MTN'
-    ], [
-        'actif' => true
-    ]);
-
-    \App\Models\Operateur::firstOrCreate([
-        'nom' => 'Moov'
-    ], [
-        'actif' => true
-    ]);
-
-    \App\Models\Operateur::firstOrCreate([
-        'nom' => 'Celtiis'
-    ], [
-        'actif' => true
-    ]);
-
-    return [
-        'count' => \App\Models\Operateur::count(),
-        'all' => \App\Models\Operateur::all(),
-    ];
-});
-
-Route::get('/db-check', function () {
-    return [
-        'database' => env('DB_DATABASE'),
-        'host'     => env('DB_HOST'),
-        'user'     => env('DB_USERNAME'),
-    ];
-});
 Route::middleware('auth:api')->group(function () {
 
     // ─── Auth ─────────────────────────────────────────────────────────────
