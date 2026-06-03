@@ -8,6 +8,7 @@ use App\Models\Operateur;
 use App\Models\CompteOperateur;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
@@ -32,40 +33,65 @@ class AuthController extends Controller
         ]);
 
         // 1. Créer le compte utilisateur
-        $user = User::create([
-            'email'        => $request->email,
-            'mot_de_passe' => Hash::make($request->mot_de_passe),
-            'role'         => 'commercant',
-        ]);
+        $nomsOperateurs = collect($request->comptes)->pluck('operateur_nom')->unique()->values();
+        $operateurs = Operateur::whereIn('nom', $nomsOperateurs)
+                               ->where('actif', true)
+                               ->get()
+                               ->keyBy('nom');
+
+        $operateursManquants = $nomsOperateurs->diff($operateurs->keys());
+
+        if ($operateursManquants->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Certains operateurs sont indisponibles. Lancez les seeders ou reactivez les operateurs.',
+                'errors'  => [
+                    'comptes' => [
+                        'Operateurs manquants: ' . $operateursManquants->implode(', '),
+                    ],
+                ],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($request, $operateurs) {
+            $user = User::create([
+                'email'        => $request->email,
+                'mot_de_passe' => Hash::make($request->mot_de_passe),
+                'role'         => 'commercant',
+            ]);
 
         // 2. Créer le profil commerçant
-        $commercant = Commercant::create([
-            'utilisateur_id' => $user->id,
-            'nom'            => $request->nom,
-            'prenom'         => $request->prenom,
-            'nom_entreprise' => $request->nom_entreprise,
-            'telephone'      => $request->telephone,
-            'ifu'            => $request->ifu,
-            'type_commerce'  => $request->type_commerce,
-            'ville'          => $request->ville,
-        ]);
+            $commercant = Commercant::create([
+                'utilisateur_id' => $user->id,
+                'nom'            => $request->nom,
+                'prenom'         => $request->prenom,
+                'nom_entreprise' => $request->nom_entreprise,
+                'telephone'      => $request->telephone,
+                'ifu'            => $request->ifu,
+                'type_commerce'  => $request->type_commerce,
+                'ville'          => $request->ville,
+            ]);
 
         // 3. Créer les comptes opérateurs (max 3)
-        foreach ($request->comptes as $compte) {
-            $operateur = Operateur::where('nom', $compte['operateur_nom'])
-                                  ->where('actif', true)
-                                  ->first();
-
-            if ($operateur) {
+            foreach ($request->comptes as $compte) {
                 CompteOperateur::create([
                     'commercant_id' => $commercant->id,
-                    'operateur_id'  => $operateur->id,
+                    'operateur_id'  => $operateurs[$compte['operateur_nom']]->id,
                     'numero'        => $compte['numero'],
                     'actif'         => true,
                     'solde'         => 0,
                 ]);
+
+                $nb = CompteOperateur::count();
+
+\Log::info("NB COMPTES OPERATEURS = ".$nb);
+
+                \Log::info('COMPTE CREE', [
+    'id' => $nouveauCompte->id,
+    'commercant_id' => $nouveauCompte->commercant_id,
+]);
             }
-        }
+            
+        });
 
         // 4. On ne génère pas de token — le commerçant doit se connecter
         return response()->json([
