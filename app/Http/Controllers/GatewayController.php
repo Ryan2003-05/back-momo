@@ -292,7 +292,7 @@ class GatewayController extends Controller
     {
         // Nettoyer le numéro
         $numero  = preg_replace('/[\s\+\-]/', '', $numero);
-        $numero  = preg_replace('/^(229|01229|01)/', '', $numero);
+        $numero  = preg_replace('/^(22901|229|01229|01)/', '', $numero);
         $prefixe = (int) substr($numero, 0, 2);
 
         return match(true) {
@@ -605,7 +605,19 @@ class GatewayController extends Controller
 
     private function normaliserNumeroClient(string $numero): string
     {
-        return preg_replace('/[^\d+]/', '', $numero) ?: $numero;
+        $digits = preg_replace('/\D+/', '', $numero) ?: '';
+
+        if (str_starts_with($digits, '22901')) {
+            $local = substr($digits, 5, 8);
+        } elseif (str_starts_with($digits, '229')) {
+            $local = substr($digits, 3, 8);
+        } elseif (str_starts_with($digits, '01')) {
+            $local = substr($digits, 2, 8);
+        } else {
+            $local = substr($digits, 0, 8);
+        }
+
+        return strlen($local) === 8 ? '+22901' . $local : (preg_replace('/[^\d+]/', '', $numero) ?: $numero);
     }
 
     private function messagePushClient(
