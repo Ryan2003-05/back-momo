@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use App\Models\Recu;
+use App\Models\SessionPaiement;
 use Illuminate\Http\Request;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -69,8 +70,51 @@ class TransactionController extends Controller
 
         $transactions = $query->paginate(15);
 
+        $pendingQuery = SessionPaiement::where('commercant_id', $commercant->id)
+            ->where('statut', 'EN_ATTENTE')
+            ->where('expires_at', '>', now())
+            ->whereDoesntHave('transaction')
+            ->with([
+                'compteOperateur.operateur',
+                'transaction',
+            ])
+            ->latest('created_at');
+
+        if ($debut) {
+            $pendingQuery->where('created_at', '>=', $debut);
+        }
+
+        $pendingSessions = $pendingQuery->get()->map(function ($session) {
+            $push = $session->pushRequests()
+                ->where('statut', 'EN_ATTENTE')
+                ->latest('created_at')
+                ->first();
+            $payload = $push?->provider_payload ?? [];
+
+            return [
+                'id' => $session->id,
+                'montant' => $session->montant,
+                'libelle' => $session->libelle,
+                'type_paiement' => $session->type_paiement,
+                'created_at' => $push?->created_at ?? $session->created_at,
+                'numero_client' => $push?->numero_client ?? 'N/A',
+                'operateur' => [
+                    'nom' => ($payload['operateur_detecte'] ?? null)
+                        ?? $session->compteOperateur->operateur->nom,
+                ],
+                'statut' => 'EN_ATTENTE',
+            ];
+        });
+
+        if ($operateur) {
+            $pendingSessions = $pendingSessions->filter(fn($session) => $session['operateur']['nom'] === $operateur);
+        }
+
+        $pendingSessions = $pendingSessions->values();
+
         return response()->json([
             'transactions' => $transactions,
+            'pending_sessions' => $pendingSessions,
         ], 200);
     }
 

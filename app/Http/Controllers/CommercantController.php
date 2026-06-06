@@ -297,7 +297,13 @@ class CommercantController extends Controller
         $total      = $transactions->count();
         $reussies   = $transactions->where('statut', 'SUCCESS')->count();
         $echouees   = $transactions->where('statut', 'FAILED')->count();
-        $enAttente  = $transactions->where('statut', 'EN_ATTENTE')->count();
+        $sessionsEnAttente = SessionPaiement::where('commercant_id', $commercant->id)
+            ->where('statut', 'EN_ATTENTE')
+            ->where('expires_at', '>', now())
+            ->whereDoesntHave('transaction')
+            ->get();
+
+        $enAttente  = $sessionsEnAttente->count();
 
         // Volume total encaissé (RG24)
         $volumeTotal = $transactions->where('statut', 'SUCCESS')

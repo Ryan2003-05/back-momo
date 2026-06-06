@@ -47,6 +47,11 @@ class SessionPaiement extends Model
         return $this->hasOne(Transaction::class, 'session_paiement_id');
     }
 
+    public function pushRequests()
+    {
+        return $this->hasMany(PushRequest::class, 'session_paiement_id');
+    }
+
     // RG8 : vérifie si la session est expirée
     public function estExpiree(): bool
     {

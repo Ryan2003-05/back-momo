@@ -64,7 +64,8 @@ class GatewayController extends Controller
             ], 409);
         }
 
-        $operateur  = $session->compteOperateur->operateur;
+        $payload = $push->provider_payload ?? [];
+        $operateur  = $payload['operateur_detecte'] ?? $session->compteOperateur->operateur->nom;
         $commercant = $session->commercant;
 
         // Récupérer tous les opérateurs actifs du commerçant
@@ -159,12 +160,11 @@ class GatewayController extends Controller
         }
 
         $compteOperateur = $session->compteOperateur;
-        $operateur       = $compteOperateur->operateur;
 
         // RG17 : vérifier que l'opérateur est actif
-        if (!$operateur->actif) {
+        if (!$compteOperateur->operateur->actif) {
             return response()->json([
-                'message' => 'Opérateur ' . $operateur->nom . ' indisponible.',
+                'message' => 'Opérateur ' . $compteOperateur->operateur->nom . ' indisponible.',
             ], 503);
         }
 
@@ -186,11 +186,29 @@ class GatewayController extends Controller
             ->toArray();
 
         if (!in_array($operateurDetecte, $operateursAcceptes)) {
+            $this->enregistrerTentativeEnAttente($session, $request->numero_client, $operateurDetecte, 'OPERATEUR_NON_ACCEPTE');
+
             return response()->json([
-                'message'             => 'Votre opérateur ' . $operateurDetecte . ' n\'est pas accepté par ce commerçant.',
+                'message'             => 'Ce commerçant ne peut pas encaisser un paiement venant de cet opérateur. Veillez choisir un autre opérateur pour effectuer votre paiement.',
                 'operateurs_acceptes' => $operateursAcceptes,
             ], 422);
         }
+
+        $comptePaiement = $session->commercant->compteOperateurs()
+            ->where('actif', true)
+            ->whereHas('operateur', fn($q) => $q->where('nom', $operateurDetecte))
+            ->with('operateur')
+            ->first();
+
+        if (!$comptePaiement) {
+            $this->enregistrerTentativeEnAttente($session, $request->numero_client, $operateurDetecte, 'COMPTE_INDISPONIBLE');
+
+            return response()->json([
+                'message' => 'Ce commerçant ne peut pas encaisser un paiement venant de cet opérateur. Veillez choisir un autre opérateur pour effectuer votre paiement.',
+            ], 422);
+        }
+
+        $operateur = $comptePaiement->operateur;
 
         // Simulation Gateway 
 
@@ -224,7 +242,7 @@ class GatewayController extends Controller
                 'date_emission'  => now(),
             ]);
 
-            $compteOperateur->increment('solde', $session->montant);
+            $comptePaiement->increment('solde', $session->montant);
         }
 
         // RG14 : notification commerçant
@@ -465,8 +483,10 @@ class GatewayController extends Controller
             ->toArray();
 
         if (!in_array($operateurDetecte, $operateursAcceptes)) {
+            $this->enregistrerTentativeEnAttente($session, $numeroClient, $operateurDetecte, 'OPERATEUR_NON_ACCEPTE');
+
             return response()->json([
-                'message' => 'L\'opérateur ' . $operateurDetecte . ' n\'est pas accepté par ce commerçant.',
+                'message' => 'Ce commerçant ne peut pas encaisser un paiement venant de cet opérateur. Veillez choisir un autre opérateur pour effectuer votre paiement.',
                 'operateurs_acceptes' => $operateursAcceptes,
             ], 422);
         }
@@ -557,7 +577,7 @@ class GatewayController extends Controller
                 'session_id' => $session->id,
                 'montant'    => $session->montant,
                 'libelle'    => $session->libelle,
-                'operateur'  => $operateur->nom,
+                'operateur'  => $operateur,
                 'commerce'   => $commercant->nom_entreprise,
                 'numero'     => $push->numero_client,
                 'expires_at' => $push->expires_at,
@@ -760,6 +780,58 @@ class GatewayController extends Controller
         ]);
 
         return $this->confirmerPaiement($fakeRequest, $sessionId);
+    }
+
+    public function signalerTentativeEnAttente(Request $request, string $sessionId)
+    {
+        $request->validate([
+            'numero_client' => 'required|string|max:20',
+        ]);
+
+        $session = SessionPaiement::with(['commercant'])->find($sessionId);
+
+        if (!$session) {
+            return response()->json(['message' => 'Session introuvable.'], 404);
+        }
+
+        if ($session->statut !== 'EN_ATTENTE' || $session->estExpiree() || $session->transaction) {
+            return response()->json(['message' => 'Session indisponible.'], 409);
+        }
+
+        $numeroClient = $this->normaliserNumeroClient($request->numero_client);
+        $operateurDetecte = $this->detecterOperateur($numeroClient);
+
+        $this->enregistrerTentativeEnAttente($session, $numeroClient, $operateurDetecte, 'OPERATEUR_NON_ACCEPTE');
+
+        return response()->json([
+            'message' => 'Tentative en attente enregistrée.',
+            'operateur_detecte' => $operateurDetecte,
+        ], 200);
+    }
+
+    private function enregistrerTentativeEnAttente(
+        SessionPaiement $session,
+        string $numeroClient,
+        string $operateurDetecte,
+        string $motif
+    ): void {
+        PushRequest::where('session_paiement_id', $session->id)
+            ->where('statut', 'EN_ATTENTE')
+            ->update(['statut' => 'EXPIRE']);
+
+        PushRequest::create([
+            'session_paiement_id' => $session->id,
+            'numero_client'       => $this->normaliserNumeroClient($numeroClient),
+            'statut'              => 'EN_ATTENTE',
+            'provider'            => 'tentative_client',
+            'provider_reference'  => 'PENDING-' . strtoupper(Str::random(10)),
+            'provider_payload'    => [
+                'delivery_status' => 'EN_ATTENTE',
+                'operateur_detecte' => $operateurDetecte,
+                'motif' => $motif,
+            ],
+            'expires_at'          => $session->expires_at,
+        ]);
     }
 }
 

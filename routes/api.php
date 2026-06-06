@@ -35,6 +35,7 @@ Route::prefix('gateway/{sessionId}')->group(function () {
     Route::get('/qrcode',          [GatewayController::class, 'genererQRCode']);
     Route::post('/payer',          [GatewayController::class, 'confirmerPaiement']);
     Route::post('/annuler',        [GatewayController::class, 'annulerPaiement']);
+    Route::post('/signaler-attente', [GatewayController::class, 'signalerTentativeEnAttente']);
     Route::post('/push',           [GatewayController::class, 'envoyerPush']);
     Route::get('/push-status',     [GatewayController::class, 'statutPush']);
     Route::post('/push-confirmer', [GatewayController::class, 'confirmerPush']);
