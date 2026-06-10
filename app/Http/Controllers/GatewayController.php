@@ -517,7 +517,7 @@ class GatewayController extends Controller
                 'push_url' => $pushUrl,
                 'raw_response' => $delivery['raw_response'],
             ],
-            'expires_at'          => now()->addMinutes(3),
+            'expires_at'          => $session->expires_at,
         ]);
 
         return response()->json([
