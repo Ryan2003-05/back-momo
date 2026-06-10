@@ -40,7 +40,7 @@ class TransactionController extends Controller
         $query = Transaction::whereHas('sessionPaiement', function ($q) use ($commercant) {
             $q->where('commercant_id', $commercant->id);
         })
-        ->with(['sessionPaiement.compteOperateur.operateur', 'recu'])
+        ->with(['sessionPaiement.compteOperateur.operateur', 'operateur', 'recu'])
         ->latest('created_at');
 
         // Filtre par période
